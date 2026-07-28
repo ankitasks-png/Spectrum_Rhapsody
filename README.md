@@ -1,4 +1,4 @@
-# Spectrum-Rhapsody
+# Spectrum Rhapsody
 
 *A personal project by Ankita S - PES1UG24CS066 ; BTech CSE Student @ PES University *
 
