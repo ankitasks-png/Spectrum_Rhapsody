@@ -1,0 +1,18 @@
+data:
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_path: data/processed/features.csv
+  labels: {}
+    # sample_001.wav: ASD
+    # sample_002.wav: TD
+
+audio:
+  sample_rate: 22050
+  top_db: 25
+
+model:
+  type: random_forest
+  n_estimators: 200
+  test_size: 0.2
+  random_state: 42
+  save_path: models/saved_models/baseline.pkl
