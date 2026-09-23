@@ -1,0 +1,79 @@
+"""Orchestrates the full pipeline: raw audio -> features -> trained model.
+
+Run as a script to process a whole folder of raw audio into a feature
+table, then train and evaluate a baseline model on it.
+"""
+
+import os
+
+import pandas as pd
+
+from src.audio.feature_extraction import extract_all_features
+from src.audio.preprocessing import preprocess
+from src.models.evaluate import evaluate_model, plot_confusion_matrix
+from src.models.train import save_model, train_baseline
+from src.utils.config import load_config
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def build_feature_table(raw_dir: str, labels: dict[str, str]) -> pd.DataFrame:
+    """Process every audio file in raw_dir into a row of features.
+
+    Args:
+        raw_dir: Folder containing raw audio files.
+        labels: Mapping of {filename: label}, e.g. {"sample_001.wav": "ASD"}.
+
+    Returns:
+        DataFrame with one row per file: features + a `label` column.
+    """
+    rows = []
+    for filename in sorted(os.listdir(raw_dir)):
+        if not filename.lower().endswith((".wav", ".mp3", ".flac")):
+            continue
+
+        file_path = os.path.join(raw_dir, filename)
+        logger.info("Processing %s", filename)
+
+        y, sr = preprocess(file_path)
+        features = extract_all_features(y, sr)
+        features["label"] = labels.get(filename, "unknown")
+        features["filename"] = filename
+        rows.append(features)
+
+    return pd.DataFrame(rows)
+
+
+def run(config_path: str = "configs/config.yaml") -> None:
+    """Run the full pipeline end to end using settings from config.yaml."""
+    config = load_config(config_path)
+
+    logger.info("Building feature table from %s", config["data"]["raw_dir"])
+    features_df = build_feature_table(
+        raw_dir=config["data"]["raw_dir"],
+        labels=config["data"].get("labels", {}),
+    )
+
+    processed_path = config["data"]["processed_path"]
+    features_df.drop(columns=["filename"]).to_csv(processed_path, index=False)
+    logger.info("Saved feature table to %s", processed_path)
+
+    logger.info("Training baseline model")
+    model, scaler, X_test, y_test = train_baseline(
+        features_df.drop(columns=["filename"]),
+        label_col="label",
+    )
+
+    metrics = evaluate_model(model, X_test, y_test)
+    logger.info("Accuracy: %.3f | F1: %.3f", metrics["accuracy"], metrics["f1"])
+    print(metrics["report"])
+
+    plot_confusion_matrix(model, X_test, y_test, labels=sorted(set(y_test)))
+
+    save_model(model, scaler, path=config["model"]["save_path"])
+    logger.info("Pipeline complete. Model saved to %s", config["model"]["save_path"])
+
+
+if __name__ == "__main__":
+    run()
